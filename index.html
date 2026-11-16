@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Supplier Quality Agent</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Supplier Quality Agent</h1>
+      <p class="sub">
+        Closes the quality loop for a print marketplace: reads customer
+        complaints, finds who really caused each problem, puts the cost where it
+        belongs, and opens corrective actions (CAPA) with suppliers that keep
+        repeating errors.
+      </p>
+      <div class="banner">
+        Demo with <strong>sample data</strong>: suppliers, carriers, orders,
+        complaints and costs are invented to show how it works.
+      </div>
+
+      <nav id="tabs">
+        <button data-t="overview" class="on">Overview</button>
+        <button data-t="complaints">Complaints</button>
+        <button data-t="suppliers">Suppliers</button>
+        <button data-t="capa">CAPA</button>
+        <button data-t="how">How it works</button>
+      </nav>
+
+      <!-- ================= OVERVIEW ================= -->
+      <section id="v-overview">
+        <div class="card">
+          <div class="row" style="justify-content: space-between">
+            <div>
+              <h2>Analysis</h2>
+              <div class="note" id="engineNote">
+                Showing rule-based results.
+              </div>
+            </div>
+            <button class="btn" id="runAI">Run AI analysis</button>
+          </div>
+          <div id="keyBox" class="hidden" style="margin-top: 10px">
+            <label class="note" for="apiKey"
+              >No built-in AI here. Paste an Anthropic API key to enable the AI
+              analysis (kept in memory only, sent straight to Anthropic):</label
+            >
+            <input
+              type="password"
+              id="apiKey"
+              class="key-input"
+              placeholder="sk-ant-…"
+              autocomplete="off"
+            />
+          </div>
+          <div id="aiStatus" class="note" style="margin-top: 8px"></div>
+        </div>
+        <div class="kpis" id="kpis"></div>
+        <div class="card" style="margin-top: 14px">
+          <h2>Who caused the cost?</h2>
+          <p class="note" style="margin: 0 0 6px">
+            Reprint and refund cost of the last 30 days, split by root-cause
+            owner.
+          </p>
+          <div id="ownerBars"></div>
+        </div>
+        <div class="card">
+          <h2>Cost by supplier</h2>
+          <div id="supplierBars"></div>
+          <div class="legend">
+            <span
+              ><span class="dot" style="background: var(--c-supplier)"></span
+              >Caused by supplier (recoverable)</span
+            >
+            <span
+              ><span class="dot" style="background: var(--c-customer)"></span
+              >Caused by customer file</span
+            >
+            <span
+              ><span class="dot" style="background: var(--c-carrier)"></span
+              >Caused by carrier</span
+            >
+            <span
+              ><span class="dot" style="background: var(--c-unclear)"></span
+              >Unclear</span
+            >
+          </div>
+        </div>
+        <div class="card" id="routingCard">
+          <h2>Routing alerts</h2>
+          <div id="routing"></div>
+        </div>
+      </section>
+
+      <!-- ================= COMPLAINTS ================= -->
+      <section id="v-complaints" class="hidden">
+        <div class="card">
+          <h2>Try it live: add a complaint</h2>
+          <p class="note" style="margin: 0 0 8px">
+            Write a complaint in any language and pick the order it belongs to.
+          </p>
+          <textarea
+            id="newText"
+            placeholder="e.g. Mijn visitekaartjes zijn helemaal wazig, de tekst is niet te lezen."
+          ></textarea>
+          <div class="row" style="margin-top: 8px">
+            <select id="newOrder"></select>
+            <button class="btn" id="addBtn">Analyse complaint</button>
+          </div>
+          <div id="addOut" style="margin-top: 10px"></div>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content: space-between">
+            <h2>All complaints</h2>
+            <select id="filterOwner">
+              <option value="">All owners</option>
+              <option value="supplier">Supplier</option>
+              <option value="customer_file">Customer file</option>
+              <option value="carrier">Carrier</option>
+              <option value="unclear">Unclear</option>
+            </select>
+          </div>
+          <p class="note" style="margin: 2px 0 6px">
+            The agent proposes; a quality specialist confirms or corrects the
+            owner.
+          </p>
+          <div id="complaintList"></div>
+        </div>
+      </section>
+
+      <!-- ================= SUPPLIERS ================= -->
+      <section id="v-suppliers" class="hidden">
+        <div class="card">
+          <h2>Supplier scorecard (last 30 days)</h2>
+          <p class="note" style="margin: 0 0 6px">
+            Only complaints caused by the supplier count against them. Rules:
+            <strong>Watch</strong> above 0.25 % defect rate;
+            <strong>CAPA</strong> when the same defect repeats 3+ times.
+          </p>
+          <div class="scroll"><table id="scoreTable"></table></div>
+        </div>
+      </section>
+
+      <!-- ================= CAPA ================= -->
+      <section id="v-capa" class="hidden">
+        <div class="card">
+          <h2>Corrective actions</h2>
+          <p class="note" style="margin: 0 0 6px">
+            Opened automatically when a supplier repeats the same defect. The
+            agent drafts the request with evidence; a person sends it.
+          </p>
+          <div id="capaList"></div>
+        </div>
+      </section>
+
+      <!-- ================= HOW ================= -->
+      <section id="v-how" class="hidden">
+        <div class="card">
+          <h2>The problem</h2>
+          <p>
+            A print marketplace does not print itself: hundreds of partner
+            printers and carriers do. Customer service resolves each complaint
+            with a reprint or refund, but the loop often stops there. The real
+            cause is not recorded, the cost is not charged to whoever caused it,
+            and the same supplier error reaches the next customer.
+          </p>
+          <h2 style="margin-top: 12px">What the agent does</h2>
+          <ol class="flow">
+            <li>
+              <strong>Reads</strong> complaints from the existing ticket stream,
+              in any language. Nobody types anything extra.
+            </li>
+            <li>
+              <strong>Classifies</strong> the defect and the root-cause owner,
+              using the order data (which printer, which carrier, what the file
+              check found).
+            </li>
+            <li>
+              <strong>Assigns the cost</strong> to the right party: customer
+              file, supplier or carrier.
+            </li>
+            <li>
+              <strong>Finds patterns</strong> per supplier and product and opens
+              a CAPA when a defect repeats.
+            </li>
+            <li>
+              <strong>Drafts</strong> the CAPA request with evidence and
+              suggests rerouting work until it is closed.
+            </li>
+          </ol>
+          <h2 style="margin-top: 12px">Who does what</h2>
+          <p>
+            <strong>AI reads and interprets</strong> messy multilingual text and
+            judges the root cause. <strong>Code calculates</strong> rates, costs
+            and thresholds, where AI should not be trusted.
+            <strong>A person decides</strong>: every owner can be confirmed or
+            overridden, and nothing is sent to a supplier automatically.
+          </p>
+          <h2 style="margin-top: 12px">How I would measure it</h2>
+          <p>
+            Recovered cost per month, repeat-defect rate per supplier after a
+            CAPA, CAPA closing time, and how often the quality specialist
+            overrides the agent (the agent's own quality KPI).
+          </p>
+          <p class="note">Prototype by Melis Gönden. Sample data only.</p>
+        </div>
+      </section>
+    </main>
+
+    <script src="data.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
