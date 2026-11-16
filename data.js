@@ -38,6 +38,84 @@ const CARRIERS = { C1: "Carrier X", C2: "Carrier Y", C3: "Carrier Z" };
 
 // Each order: product, supplier, carrier, cost of a reprint/refund (€), and what the upload file check found.
 const ORDERS = {
+  // Older orders (August and September) for the history view
+  "HP-09612": {
+    product: "Flyers",
+    supplier: "S4",
+    carrier: "C2",
+    cost: 92,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-09640": {
+    product: "Business cards",
+    supplier: "S1",
+    carrier: "C1",
+    cost: 41,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-09688": {
+    product: "Posters",
+    supplier: "S3",
+    carrier: "C3",
+    cost: 118,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-09731": {
+    product: "Business cards",
+    supplier: "S5",
+    carrier: "C2",
+    cost: 37,
+    file: { dpi: 110, bleed: true, vividRGB: false },
+  },
+  "HP-09795": {
+    product: "Flyers",
+    supplier: "S2",
+    carrier: "C1",
+    cost: 61,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-09842": {
+    product: "Flyers",
+    supplier: "S4",
+    carrier: "C2",
+    cost: 84,
+    file: { dpi: 310, bleed: true, vividRGB: false },
+  },
+  "HP-09921": {
+    product: "Business cards",
+    supplier: "S2",
+    carrier: "C2",
+    cost: 33,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-09903": {
+    product: "Business cards",
+    supplier: "S5",
+    carrier: "C2",
+    cost: 40,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-09958": {
+    product: "Posters",
+    supplier: "S3",
+    carrier: "C2",
+    cost: 102,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-10011": {
+    product: "Flyers",
+    supplier: "S1",
+    carrier: "C3",
+    cost: 69,
+    file: { dpi: 300, bleed: true, vividRGB: false },
+  },
+  "HP-10087": {
+    product: "Business cards",
+    supplier: "S2",
+    carrier: "C2",
+    cost: 34,
+    file: { dpi: 300, bleed: false, vividRGB: false },
+  },
   "HP-10421": {
     product: "Flyers",
     supplier: "S4",
@@ -196,6 +274,84 @@ const ORDERS = {
 
 // Complaints as they arrive in the ticket stream (several languages, messy wording).
 const COMPLAINTS = [
+  // Older complaints (August and September)
+  {
+    id: "T-702",
+    order: "HP-09612",
+    date: "2026-08-11",
+    lang: "DE",
+    text: "Die Farben sind zu dunkel, das Blau wirkt fast violett.",
+  },
+  {
+    id: "T-709",
+    order: "HP-09640",
+    date: "2026-08-19",
+    lang: "FR",
+    text: "Le colis est arrivé avec une semaine de retard.",
+  },
+  {
+    id: "T-715",
+    order: "HP-09688",
+    date: "2026-08-27",
+    lang: "EN",
+    text: "Posters arrived creased, the tube was crushed.",
+  },
+  {
+    id: "T-721",
+    order: "HP-09731",
+    date: "2026-09-03",
+    lang: "NL",
+    text: "De tekst op de kaartjes is wazig en niet te lezen.",
+  },
+  {
+    id: "T-728",
+    order: "HP-09795",
+    date: "2026-09-09",
+    lang: "NL",
+    text: "We hebben 250 flyers ontvangen in plaats van 500.",
+  },
+  {
+    id: "T-734",
+    order: "HP-09842",
+    date: "2026-09-15",
+    lang: "EN",
+    text: "The colours are off again, our green looks brownish.",
+  },
+  {
+    id: "T-737",
+    order: "HP-09921",
+    date: "2026-09-18",
+    lang: "NL",
+    text: "De visitekaartjes zijn wazig. Bel mij op 06 12345678 of mail naar j.devries@example.nl, postcode 3331 AB.",
+  },
+  {
+    id: "T-740",
+    order: "HP-09903",
+    date: "2026-09-22",
+    lang: "EN",
+    text: "Cards are cut crooked, the margin is uneven.",
+  },
+  {
+    id: "T-747",
+    order: "HP-09958",
+    date: "2026-09-26",
+    lang: "ES",
+    text: "Los pósteres llegaron con retraso de cuatro días.",
+  },
+  {
+    id: "T-753",
+    order: "HP-10011",
+    date: "2026-10-02",
+    lang: "TR",
+    text: "Flyerlar ıslak geldi, kutu hasarlı.",
+  },
+  {
+    id: "T-758",
+    order: "HP-10087",
+    date: "2026-10-07",
+    lang: "EN",
+    text: "There is a white edge on the cards.",
+  },
   {
     id: "T-801",
     order: "HP-10421",

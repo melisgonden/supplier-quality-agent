@@ -28,6 +28,19 @@
         <button data-t="how">How it works</button>
       </nav>
 
+      <div class="toolbar">
+        <label class="note" for="period">Period</label>
+        <select id="period"></select>
+        <span class="note" id="periodNote"></span>
+        <span class="spacer"></span>
+        <button class="btn ghost" id="exportComplaints">
+          Download complaints (Excel)
+        </button>
+        <button class="btn ghost" id="exportScorecard">
+          Download scorecard (Excel)
+        </button>
+      </div>
+
       <!-- ================= OVERVIEW ================= -->
       <section id="v-overview">
         <div class="card">
@@ -59,8 +72,8 @@
         <div class="card" style="margin-top: 14px">
           <h2>Who caused the cost?</h2>
           <p class="note" style="margin: 0 0 6px">
-            Reprint and refund cost of the last 30 days, split by root-cause
-            owner.
+            Reprint and refund cost (<span class="plabel">last 30 days</span>),
+            split by root-cause owner.
           </p>
           <div id="ownerBars"></div>
         </div>
@@ -112,6 +125,12 @@
         <div class="card">
           <div class="row" style="justify-content: space-between">
             <h2>All complaints</h2>
+            <input
+              type="search"
+              id="search"
+              class="search"
+              placeholder="Search order, supplier, word…"
+            />
             <select id="filterOwner">
               <option value="">All owners</option>
               <option value="supplier">Supplier</option>
@@ -124,6 +143,7 @@
             The agent proposes; a quality specialist confirms or corrects the
             owner.
           </p>
+          <div class="note" id="complaintCount"></div>
           <div id="complaintList"></div>
         </div>
       </section>
@@ -131,7 +151,7 @@
       <!-- ================= SUPPLIERS ================= -->
       <section id="v-suppliers" class="hidden">
         <div class="card">
-          <h2>Supplier scorecard (last 30 days)</h2>
+          <h2>Supplier scorecard (<span class="plabel">last 30 days</span>)</h2>
           <p class="note" style="margin: 0 0 6px">
             Only complaints caused by the supplier count against them. Rules:
             <strong>Watch</strong> above 0.25 % defect rate;
@@ -144,12 +164,19 @@
       <!-- ================= CAPA ================= -->
       <section id="v-capa" class="hidden">
         <div class="card">
-          <h2>Corrective actions</h2>
+          <div class="row" style="justify-content: space-between">
+            <h2>Corrective actions</h2>
+            <button class="btn ghost" id="exportCapa">
+              Download CAPA board (Excel)
+            </button>
+          </div>
           <p class="note" style="margin: 0 0 6px">
-            Opened automatically when a supplier repeats the same defect. The
-            agent drafts the request with evidence; a person sends it.
+            Opened automatically when a supplier repeats the same defect. Each
+            CAPA gets an owner, a priority and a due date, and every change is
+            kept in its history. The agent drafts the letter; a person sends it.
           </p>
-          <div id="capaList"></div>
+          <div class="board" id="capaBoard"></div>
+          <div id="capaLetters"></div>
         </div>
       </section>
 
@@ -201,6 +228,31 @@
             Recovered cost per month, repeat-defect rate per supplier after a
             CAPA, CAPA closing time, and how often the quality specialist
             overrides the agent (the agent's own quality KPI).
+          </p>
+          <h2 style="margin-top: 12px">Privacy: what the AI sees</h2>
+          <p>
+            Company names, e-mail addresses, phone numbers, postcodes and IBANs
+            are masked before anything is sent to the AI. The real names are
+            filled in again only after the answer comes back.
+          </p>
+          <div class="mask-demo">
+            <div>
+              <div class="note">Complaint in the system</div>
+              <pre id="maskBefore"></pre>
+            </div>
+            <div>
+              <div class="note">What the AI receives</div>
+              <pre id="maskAfter"></pre>
+            </div>
+          </div>
+          <h2 style="margin-top: 12px">History and export</h2>
+          <p>
+            Pick a week, a month or all history at the top. Decisions and new
+            complaints are kept in this browser, and both the complaint list and
+            the scorecard can be downloaded for Excel.
+            <button class="btn ghost" id="resetDemo" style="margin-left: 6px">
+              Reset demo data
+            </button>
           </p>
           <p class="note">Prototype by Melis Gönden. Sample data only.</p>
         </div>

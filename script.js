@@ -164,7 +164,85 @@ let complaints = COMPLAINTS.slice();
 complaints.forEach((c) => (results[c.id] = ruleClassify(c)));
 const ownerOf = (c) => overrides[c.id] || results[c.id].owner;
 const today = new Date("2026-11-10");
-const inLast30 = (c) => (today - new Date(c.date)) / 86400000 <= 30;
+
+/* =====================================================================
+   HISTORY: saved in the browser (localStorage), so a person's decisions
+   and new complaints are still there after a reload.
+   In production this would be a database.
+   ===================================================================== */
+const STORE = "sqa-history-v1";
+const capaState = {}; // CAPA key -> { status, assignee, priority, due, log: [{ at, text }] }
+function saveHistory() {
+  try {
+    const added = complaints.filter((c) => !COMPLAINTS.includes(c));
+    const addedResults = {};
+    added.forEach((c) => (addedResults[c.id] = results[c.id]));
+    localStorage.setItem(
+      STORE,
+      JSON.stringify({ overrides, added, addedResults, capaState }),
+    );
+  } catch {}
+}
+function loadHistory() {
+  try {
+    const h = JSON.parse(localStorage.getItem(STORE) || "null");
+    if (!h) return;
+    Object.assign(overrides, h.overrides || {});
+    Object.assign(capaState, h.capaState || {});
+    (h.added || []).forEach((c) => {
+      if (!ORDERS[c.order] || complaints.some((x) => x.id === c.id)) return;
+      complaints.push(c);
+      results[c.id] = (h.addedResults || {})[c.id] || ruleClassify(c);
+    });
+  } catch {}
+}
+loadHistory();
+
+/* =====================================================================
+   PERIOD: last 7 days, last 30 days, one month, or all history
+   ===================================================================== */
+let period = "30";
+const daysAgo = (c) => (today - new Date(c.date)) / 86400000;
+const monthName = (ym) =>
+  new Date(ym + "-01").toLocaleString("en-GB", {
+    month: "long",
+    year: "numeric",
+  });
+function inPeriod(c) {
+  if (period === "all") return true;
+  if (period === "7" || period === "30") return daysAgo(c) <= Number(period);
+  return c.date.startsWith(period);
+}
+function periodDays() {
+  if (period === "7" || period === "30") return Number(period);
+  if (period === "all")
+    return Math.max(30, Math.max(...complaints.map(daysAgo)));
+  const [y, m] = period.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function periodLabel() {
+  if (period === "7") return "last 7 days";
+  if (period === "30") return "last 30 days";
+  if (period === "all") return "all history";
+  return monthName(period);
+}
+function fillPeriods() {
+  const months = [...new Set(complaints.map((c) => c.date.slice(0, 7)))]
+    .sort()
+    .reverse();
+  const opts = [
+    ["7", "Last 7 days"],
+    ["30", "Last 30 days"],
+    ...months.map((m) => [m, monthName(m)]),
+    ["all", "All history"],
+  ];
+  $("period").innerHTML = opts
+    .map(
+      ([v, l]) =>
+        `<option value="${v}" ${v === period ? "selected" : ""}>${l}</option>`,
+    )
+    .join("");
+}
 
 /* =====================================================================
    CALCULATIONS (code, not AI)
@@ -172,14 +250,14 @@ const inLast30 = (c) => (today - new Date(c.date)) / 86400000 <= 30;
 function costByOwner() {
   const m = { supplier: 0, customer_file: 0, carrier: 0, unclear: 0 };
   complaints
-    .filter(inLast30)
+    .filter(inPeriod)
     .forEach((c) => (m[ownerOf(c)] += ORDERS[c.order].cost));
   return m;
 }
 function scorecard() {
   return Object.entries(SUPPLIERS).map(([sid, s]) => {
     const mine = complaints.filter(
-      (c) => inLast30(c) && ORDERS[c.order].supplier === sid,
+      (c) => inPeriod(c) && ORDERS[c.order].supplier === sid,
     );
     const own = mine.filter((c) => ownerOf(c) === "supplier");
     const byDefect = {};
@@ -190,7 +268,8 @@ function scorecard() {
     const top = Object.entries(byDefect).sort(
       (a, b) => b[1].length - a[1].length,
     )[0];
-    const rate = (own.length / s.monthlyOrders) * 100;
+    const ordersInPeriod = (s.monthlyOrders * periodDays()) / 30;
+    const rate = (own.length / ordersInPeriod) * 100;
     const capaDefects = Object.entries(byDefect).filter(
       ([, list]) => list.length >= CAPA_REPEAT,
     );
@@ -237,22 +316,27 @@ const ownerColour = {
 };
 
 function renderAll() {
+  $("periodNote").textContent = "Showing: " + periodLabel();
+  document
+    .querySelectorAll(".plabel")
+    .forEach((e) => (e.textContent = periodLabel()));
   renderOverview();
   renderComplaints();
   renderScorecard();
   renderCapa();
+  saveHistory();
 }
 
 function renderOverview() {
   const m = costByOwner(),
     total = Object.values(m).reduce((a, b) => a + b, 0);
   const sc = scorecard();
-  const openCapa = sc.reduce((a, r) => a + r.capaDefects.length, 0);
+  const openCapa = capaItems().filter((x) => x.st.status !== "closed").length;
   $("kpis").innerHTML = [
-    [complaints.filter(inLast30).length, "Complaints, last 30 days"],
+    [complaints.filter(inPeriod).length, "Complaints, " + periodLabel()],
     [eur(total), "Reprint & refund cost"],
     [eur(m.supplier + m.carrier), "Recoverable from suppliers & carriers"],
-    [openCapa, "CAPAs to open"],
+    [openCapa, "Open CAPAs"],
   ]
     .map(
       ([v, l]) =>
@@ -275,7 +359,7 @@ function renderOverview() {
     .map((r) => {
       const parts = { supplier: 0, customer_file: 0, carrier: 0, unclear: 0 };
       complaints
-        .filter((c) => inLast30(c) && ORDERS[c.order].supplier === r.sid)
+        .filter((c) => inPeriod(c) && ORDERS[c.order].supplier === r.sid)
         .forEach((c) => (parts[ownerOf(c)] += ORDERS[c.order].cost));
       return `<div class="bar"><span>${esc(r.s.name)}</span><div class="track">${Object.keys(
         parts,
@@ -314,10 +398,39 @@ function renderOverview() {
     alerts.join("") || '<p class="note">No routing changes suggested.</p>';
 }
 
+const searchText = (c) => {
+  const o = ORDERS[c.order];
+  return [
+    c.id,
+    c.order,
+    c.date,
+    c.lang,
+    c.text,
+    o.product,
+    SUPPLIERS[o.supplier].name,
+    CARRIERS[o.carrier],
+    results[c.id].defect,
+    OWNERS[ownerOf(c)],
+  ]
+    .join(" ")
+    .toLowerCase();
+};
 function renderComplaints() {
   const f = $("filterOwner").value;
-  $("complaintList").innerHTML = complaints
-    .filter((c) => !f || ownerOf(c) === f)
+  const q = $("search").value.trim().toLowerCase();
+  const list = complaints.filter(
+    (c) =>
+      inPeriod(c) &&
+      (!f || ownerOf(c) === f) &&
+      (!q || searchText(c).includes(q)),
+  );
+  $("complaintCount").textContent =
+    list.length +
+    " complaint" +
+    (list.length === 1 ? "" : "s") +
+    " · " +
+    periodLabel();
+  $("complaintList").innerHTML = list
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((c) => {
       const r = results[c.id],
@@ -364,22 +477,147 @@ function renderScorecard() {
 }
 
 const letters = {};
-function renderCapa() {
-  const items = [];
+const PEOPLE = [
+  "Unassigned",
+  "Melis (Quality)",
+  "Sara (Quality lead)",
+  "Tom (Supplier manager)",
+];
+const STATUSES = {
+  open: "Open",
+  progress: "In progress",
+  waiting: "Waiting for supplier",
+  closed: "Closed",
+};
+const PRIORITIES = ["High", "Medium", "Low"];
+const isoDate = (d) => d.toISOString().slice(0, 10);
+const stamp = () =>
+  new Date().toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+// Every CAPA in the period, plus any CAPA that already has a history.
+function capaItems() {
+  const items = {};
   scorecard().forEach((r) =>
     r.capaDefects.forEach(([defect, list]) => {
-      const key = r.sid + "-" + defect;
-      const cost = list.reduce((a, c) => a + ORDERS[c.order].cost, 0);
-      items.push(`<div class="item">
-      <strong>${esc(r.s.name)} · ${esc(defect)}</strong> <span class="pill st-capa">Open</span>
-      <div class="meta">${list.length} supplier-caused complaints in 30 days · ${eur(cost)} cost · orders ${list.map((c) => c.order).join(", ")}</div>
-      <div class="row" style="margin-top:6px"><button class="btn ghost draft" data-key="${key}">Draft CAPA request</button><span class="meta" id="st-${key}"></span></div>
-      <div id="letter-${key}">${letters[key] ? `<div class="letter">${esc(letters[key])}</div>` : ""}</div>
-    </div>`);
+      items[r.sid + "-" + defect] = { sid: r.sid, s: r.s, defect, list };
     }),
   );
-  $("capaList").innerHTML =
-    items.join("") || '<p class="note">No CAPA needed right now.</p>';
+  Object.keys(capaState).forEach((key) => {
+    if (items[key]) return;
+    const [sid, defect] = key.split("-");
+    if (!SUPPLIERS[sid]) return;
+    const list = complaints.filter(
+      (c) =>
+        ORDERS[c.order].supplier === sid &&
+        ownerOf(c) === "supplier" &&
+        results[c.id].defect === defect,
+    );
+    items[key] = { sid, s: SUPPLIERS[sid], defect, list };
+  });
+  return Object.entries(items).map(([key, it]) => {
+    const cost = it.list.reduce((a, c) => a + ORDERS[c.order].cost, 0);
+    if (!capaState[key]) {
+      const due = new Date(today);
+      due.setDate(due.getDate() + 7); // 5 working days
+      capaState[key] = {
+        status: "open",
+        assignee: "Unassigned",
+        priority: it.list.length >= 5 || cost >= 300 ? "High" : "Medium",
+        due: isoDate(due),
+        log: [
+          {
+            at: stamp(),
+            text:
+              "Opened by the agent: " +
+              it.list.length +
+              " repeated " +
+              it.defect.replace("_", " ") +
+              " complaints",
+          },
+        ],
+      };
+    }
+    return { key, ...it, cost, st: capaState[key] };
+  });
+}
+
+function updateCapa(key, field, value) {
+  const st = capaState[key];
+  if (st[field] === value) return;
+  const label = field === "status" ? STATUSES[value] : value;
+  st[field] = value;
+  st.log.push({
+    at: stamp(),
+    text: field[0].toUpperCase() + field.slice(1) + " → " + label,
+  });
+  renderAll();
+}
+
+function renderCapa() {
+  const items = capaItems();
+  const sel = (key, field, options, current) =>
+    `<select class="capa-field" data-key="${key}" data-field="${field}">${options
+      .map(
+        ([v, l]) =>
+          `<option value="${v}" ${v === current ? "selected" : ""}>${l}</option>`,
+      )
+      .join("")}</select>`;
+  $("capaBoard").innerHTML = Object.entries(STATUSES)
+    .map(([status, title]) => {
+      const cards = items.filter((x) => x.st.status === status);
+      return `<div class="col">
+        <div class="col-head">${title} <span class="meta">${cards.length}</span></div>
+        ${
+          cards
+            .map((x) => {
+              const overdue =
+                x.st.status !== "closed" && x.st.due < isoDate(today);
+              return `<div class="capa-card prio-${x.st.priority.toLowerCase()}">
+              <strong>${esc(x.s.name)} · ${esc(x.defect.replace("_", " "))}</strong>
+              <div class="meta">${x.list.length} complaints · ${eur(x.cost)} · orders ${x.list.map((c) => c.order).join(", ")}</div>
+              <div class="meta ${overdue ? "overdue" : ""}">Due ${x.st.due}${overdue ? " · overdue" : ""}</div>
+              <label class="meta">Status ${sel(x.key, "status", Object.entries(STATUSES), x.st.status)}</label>
+              <label class="meta">Owner ${sel(
+                x.key,
+                "assignee",
+                PEOPLE.map((p) => [p, p]),
+                x.st.assignee,
+              )}</label>
+              <label class="meta">Priority ${sel(
+                x.key,
+                "priority",
+                PRIORITIES.map((p) => [p, p]),
+                x.st.priority,
+              )}</label>
+              <button class="btn ghost draft" data-key="${x.key}">Draft CAPA request</button>
+              <span class="meta" id="st-${x.key}"></span>
+              <details><summary class="meta">History (${x.st.log.length})</summary>
+                ${x.st.log.map((l) => `<div class="meta">${esc(l.at)} – ${esc(l.text)}</div>`).join("")}
+              </details>
+            </div>`;
+            })
+            .join("") || '<p class="note">–</p>'
+        }
+      </div>`;
+    })
+    .join("");
+  $("capaLetters").innerHTML = items
+    .filter((x) => letters[x.key])
+    .map(
+      (x) =>
+        `<div class="item"><strong>${esc(x.s.name)} · ${esc(x.defect.replace("_", " "))}</strong><div class="letter">${esc(letters[x.key])}</div></div>`,
+    )
+    .join("");
+  document
+    .querySelectorAll(".capa-field")
+    .forEach((e) =>
+      e.addEventListener("change", () =>
+        updateCapa(e.dataset.key, e.dataset.field, e.value),
+      ),
+    );
   document
     .querySelectorAll(".draft")
     .forEach((b) =>
@@ -439,14 +677,27 @@ const parseJson = (t) => {
   return JSON.parse(t.slice(a, b + 1));
 };
 
+/* =====================================================================
+   MASKING: nothing that identifies a company or a person goes to the AI.
+   Suppliers and carriers are sent as codes (S4, C2); e-mail addresses,
+   phone numbers, postcodes and IBANs in the complaint text are replaced.
+   Real names are put back only after the answer comes back.
+   ===================================================================== */
+function maskText(t) {
+  return String(t)
+    .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "[EMAIL]")
+    .replace(/\b[A-Z]{2}\d{2}\s?[A-Z]{4}(\s?\d{2,4}){2,5}\b/g, "[IBAN]")
+    .replace(/(\+|00)?\d[\d\s-]{7,}\d/g, "[PHONE]")
+    .replace(/\b\d{4}\s?[A-Z]{2}\b/g, "[POSTCODE]");
+}
 function caseFor(c) {
   const o = ORDERS[c.order];
   return {
     id: c.id,
-    text: c.text,
+    text: maskText(c.text),
     product: o.product,
-    supplier: SUPPLIERS[o.supplier].name,
-    carrier: CARRIERS[o.carrier],
+    supplier: o.supplier,
+    carrier: o.carrier,
     upload_file_check: {
       dpi: o.file.dpi,
       has_bleed: o.file.bleed,
@@ -510,38 +761,61 @@ $("runAI").addEventListener("click", async () => {
 async function draftCapa(key) {
   const [sid, defect] = key.split("-");
   const s = SUPPLIERS[sid];
-  const list = complaints.filter(
+  let list = complaints.filter(
     (c) =>
-      inLast30(c) &&
+      inPeriod(c) &&
       ORDERS[c.order].supplier === sid &&
       ownerOf(c) === "supplier" &&
       results[c.id].defect === defect,
   );
+  if (!list.length)
+    list = complaints.filter(
+      (c) =>
+        ORDERS[c.order].supplier === sid &&
+        ownerOf(c) === "supplier" &&
+        results[c.id].defect === defect,
+    );
   const st = $("st-" + key);
+  const logDraft = (by) =>
+    capaState[key] &&
+    capaState[key].log.push({
+      at: stamp(),
+      text: "CAPA letter drafted (" + by + ")",
+    });
+  // The AI only sees masked text and the code "{{SUPPLIER}}"; the real name is filled in here.
+  const maskedEvidence = list
+    .map(
+      (c) =>
+        `- ${c.order} (${ORDERS[c.order].product}, ${c.date}): "${maskText(c.text)}"`,
+    )
+    .join("\n");
   const evidence = list
     .map(
       (c) =>
         `- ${c.order} (${ORDERS[c.order].product}, ${c.date}): "${c.text}"`,
     )
     .join("\n");
-  const fallback = `Subject: Corrective action request – repeated ${defect} defects\n\nDear ${s.name} team,\n\nIn the last 30 days we received ${list.length} customer complaints about ${defect} on orders produced by you. The customer files passed our upload checks, so we consider this a production issue.\n\n${evidence}\n\nPlease send us within 5 working days:\n1. The root cause of these defects\n2. The immediate containment action\n3. The corrective and preventive actions, with dates\n\nWe will review the defect rate for 30 days after your actions.\n\nKind regards,\nQuality team`;
+  const fallback = `Subject: Corrective action request – repeated ${defect} defects\n\nDear ${s.name} team,\n\nIn the period ${periodLabel()} we received ${list.length} customer complaints about ${defect} on orders produced by you. The customer files passed our upload checks, so we consider this a production issue.\n\n${evidence}\n\nPlease send us within 5 working days:\n1. The root cause of these defects\n2. The immediate containment action\n3. The corrective and preventive actions, with dates\n\nWe will review the defect rate for 30 days after your actions.\n\nKind regards,\nQuality team`;
   if (!ai) {
     letters[key] = fallback;
-    renderCapa();
+    logDraft("template");
+    renderAll();
     return;
   }
   st.innerHTML = '<span class="spinner"></span>Drafting…';
   try {
-    const prompt = `Write a short, professional corrective action request (CAPA) from a print marketplace's quality team to partner printer "${s.name}" (country ${s.country}).
-Repeated defect: ${defect}. Supplier-caused complaints in the last 30 days (customer files passed the upload check):
-${evidence}
+    const prompt = `Write a short, professional corrective action request (CAPA) from a print marketplace's quality team to a partner printer. Address it as "{{SUPPLIER}}" (country ${s.country}); never invent a name.
+Repeated defect: ${defect}. Supplier-caused complaints (${periodLabel()}; customer files passed the upload check):
+${maskedEvidence}
 Include: a subject line, the facts and evidence (summarise the complaints in English), a request for root cause, containment, corrective and preventive actions with dates within 5 working days, and that the defect rate will be reviewed for 30 days. Firm but respectful; keep the partnership. Plain text, under 220 words.`;
     const res = await ai(prompt, { modelTier: "default" });
-    letters[key] = res.text.trim();
+    letters[key] = res.text.trim().split("{{SUPPLIER}}").join(s.name);
+    logDraft("AI");
   } catch {
     letters[key] = fallback;
+    logDraft("template");
   }
-  renderCapa();
+  renderAll();
 }
 
 /* ---- Live demo: add a complaint ---- */
@@ -588,6 +862,7 @@ $("addBtn").addEventListener("click", async () => {
     <div class="meta">Added to the list; scorecard and CAPA are updated.</div>`;
   $("newText").value = "";
   $("addBtn").disabled = false;
+  fillPeriods();
   renderAll();
 });
 
@@ -605,5 +880,152 @@ document.querySelectorAll("#tabs button").forEach((b) =>
   }),
 );
 $("filterOwner").addEventListener("change", renderComplaints);
+$("search").addEventListener("input", renderComplaints);
+$("period").addEventListener("change", (e) => {
+  period = e.target.value;
+  renderAll();
+});
 
+/* =====================================================================
+   EXPORT TO EXCEL (CSV). Semicolon-separated with a UTF-8 marker, so Excel
+   opens it directly and keeps characters like ü, é and ş.
+   ===================================================================== */
+function downloadCsv(name, rows) {
+  const cell = (v) => {
+    const t = String(v ?? "");
+    return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  const csv = "\uFEFF" + rows.map((r) => r.map(cell).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+  );
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+const fileTag = () =>
+  period === "7" || period === "30" ? "last-" + period + "-days" : period;
+$("exportComplaints").addEventListener("click", () => {
+  const rows = [
+    [
+      "Ticket",
+      "Date",
+      "Language",
+      "Order",
+      "Product",
+      "Supplier",
+      "Carrier",
+      "Complaint",
+      "Defect",
+      "Owner",
+      "Decided by",
+      "Confidence %",
+      "Cost EUR",
+    ],
+  ];
+  complaints
+    .filter(inPeriod)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach((c) => {
+      const o = ORDERS[c.order],
+        r = results[c.id];
+      rows.push([
+        c.id,
+        c.date,
+        c.lang,
+        c.order,
+        o.product,
+        SUPPLIERS[o.supplier].name,
+        CARRIERS[o.carrier],
+        c.text,
+        r.defect.replace("_", " "),
+        OWNERS[ownerOf(c)],
+        overrides[c.id] ? "person" : r.by === "ai" ? "AI" : "rules",
+        Math.round(r.confidence * 100),
+        o.cost,
+      ]);
+    });
+  downloadCsv("complaints_" + fileTag() + ".csv", rows);
+});
+$("exportScorecard").addEventListener("click", () => {
+  const label = { ok: "OK", watch: "Watch", capa: "CAPA" };
+  const rows = [
+    [
+      "Supplier",
+      "Country",
+      "Orders per month",
+      "Complaints (all)",
+      "Complaints (supplier-caused)",
+      "Defect rate %",
+      "Top defect",
+      "Supplier-caused cost EUR",
+      "Status",
+    ],
+  ];
+  scorecard()
+    .sort((a, b) => b.rate - a.rate)
+    .forEach((r) =>
+      rows.push([
+        r.s.name,
+        r.s.country,
+        r.s.monthlyOrders,
+        r.all,
+        r.own,
+        r.rate.toFixed(2),
+        r.top ? r.top[0].replace("_", " ") : "",
+        r.cost,
+        label[r.status],
+      ]),
+    );
+  downloadCsv("supplier-scorecard_" + fileTag() + ".csv", rows);
+});
+$("resetDemo").addEventListener("click", () => {
+  try {
+    localStorage.removeItem(STORE);
+  } catch {}
+  location.reload();
+});
+
+$("exportCapa").addEventListener("click", () => {
+  const rows = [
+    [
+      "Supplier",
+      "Defect",
+      "Complaints",
+      "Cost EUR",
+      "Status",
+      "Owner",
+      "Priority",
+      "Due",
+      "History",
+    ],
+  ];
+  capaItems().forEach((x) =>
+    rows.push([
+      x.s.name,
+      x.defect.replace("_", " "),
+      x.list.length,
+      x.cost,
+      STATUSES[x.st.status],
+      x.st.assignee,
+      x.st.priority,
+      x.st.due,
+      x.st.log.map((l) => l.at + " " + l.text).join(" | "),
+    ]),
+  );
+  downloadCsv("capa-board.csv", rows);
+});
+
+// Show, on the How it works tab, exactly what the AI receives for one complaint.
+(() => {
+  const c = complaints.find((x) => /@/.test(x.text)) || complaints[0];
+  const o = ORDERS[c.order];
+  $("maskBefore").textContent =
+    `${c.text}\nSupplier: ${SUPPLIERS[o.supplier].name} · Carrier: ${CARRIERS[o.carrier]}`;
+  $("maskAfter").textContent = JSON.stringify(caseFor(c), null, 1);
+})();
+
+fillPeriods();
 renderAll();
