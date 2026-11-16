@@ -64,4 +64,4 @@ I have three years of experience in quality assurance: root cause analysis, supp
 - Use photos attached to complaints as extra evidence
 - Feed confirmed root causes back into supplier selection automatically
 
-*Prototype by Melis Gönden.*
+*Prototype by Melis Gönden. Built with Claude as my coding partner.*
