@@ -127,12 +127,18 @@ const KEYWORDS = {
     "çok ince",
   ],
 };
+// A keyword must start a word: "red" matches "too red" but not "ordered".
+const hasWord = (text, k) =>
+  new RegExp(
+    "(^|[^\\p{L}])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+    "u",
+  ).test(text);
 function ruleClassify(c) {
   const t = c.text.toLowerCase();
   const o = ORDERS[c.order];
   let defect = "other";
   for (const d of Object.keys(KEYWORDS))
-    if (KEYWORDS[d].some((k) => t.includes(k))) {
+    if (KEYWORDS[d].some((k) => hasWord(t, k))) {
       defect = d;
       break;
     }
@@ -439,7 +445,7 @@ function renderComplaints() {
       return `<div class="item">
         <div class="meta">${c.id} · ${c.date} · ${c.lang} · ${c.order} · ${esc(o.product)} · ${esc(SUPPLIERS[o.supplier].name)} · ${esc(CARRIERS[o.carrier])} · ${eur(o.cost)}</div>
         <div class="quote">“${esc(c.text)}”</div>
-        <span class="pill">${esc(r.defect)}</span><span class="pill own-${own}">${OWNERS[own]}</span>
+        <span class="pill">${esc(r.defect.replace("_", " "))}</span><span class="pill own-${own}">${OWNERS[own]}</span>
         <span class="meta">${Math.round(r.confidence * 100)} % · ${r.by === "ai" ? "AI" : "rules"}${overrides[c.id] ? " · confirmed by person" : ""}</span>
         <div class="meta" style="margin-top:2px">${esc(r.evidence)}</div>
         <div class="row" style="margin-top:6px"><label class="meta">Owner:
@@ -857,7 +863,7 @@ $("addBtn").addEventListener("click", async () => {
   }
   complaints.push(c);
   results[c.id] = r;
-  out.innerHTML = `<span class="pill">${esc(r.defect)}</span><span class="pill own-${r.owner}">${OWNERS[r.owner]}</span>
+  out.innerHTML = `<span class="pill">${esc(r.defect.replace("_", " "))}</span><span class="pill own-${r.owner}">${OWNERS[r.owner]}</span>
     <span class="meta">${Math.round(r.confidence * 100)} % · ${r.by === "ai" ? "AI" : "rules"}</span><div class="meta">${esc(r.evidence)}</div>
     <div class="meta">Added to the list; scorecard and CAPA are updated.</div>`;
   $("newText").value = "";
